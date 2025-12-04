@@ -10,6 +10,77 @@ pip install .
 
 安装后可直接使用 `datalogic` 命令。
 
+> 说明：仓库不直接提交 wheel / tar.gz 等二进制发布产物，若需本地生成发行包，请运行 `python scripts/build_artifacts.py`，脚本会使用 `python -m build` 在
+> `dist/` 目录下生成可供发布的 wheel 与源码压缩包。
+
+### 拉取发布产物（无法直接获取二进制时的方案）
+- 若需要使用已经发布的 wheel / tar.gz，但无法直接拉取二进制，可运行：
+  ```bash
+  python scripts/fetch_release_assets.py --repo <owner/repo> --tag v0.2.0 \
+
+    --asset datalogic-0.2.0-py3-none-any.whl \
+
+    --asset datalogic-0.2.0.tar.gz --out dist/
+  ```
+- 支持通过环境变量 `GITHUB_TOKEN`（或 `--token-env` 指定）带入 token，降低 GitHub API 频率限制并访问私有 Release。
+- 如果无法访问 GitHub Release，可继续使用 `python scripts/build_artifacts.py` 在本地生成。
+
+
+## 安装与使用指南
+
+### 环境准备
+- Python 3.8+
+- `pip install mvt`
+- `pip install -r requirements.txt`
+- 可选：`brew install libimobiledevice`（macOS 可使用 libimobiledevice 读取设备信息）
+
+### 安装 MVT（Mobile Verification Toolkit）
+- macOS：`brew install mvt`
+- 或跨平台：`pip3 install mvt`
+
+### 统一检测脚本示例
+```bash
+python3 detect_from_tree.py --src /path/to/backup --out ./out
+```
+
+- 自动识别目录类型（iOS 备份 / 提权备份 / sysdiagnose），匹配越狱/Hook、权限数据库、MDM/描述文件、企业签名与取证痕迹。
+- 自动串联 MVT（check-backup / decrypt-backup / check-iocs）与仓库内置脚本：`ios_backup_full_check.py`、`analyze_profiles.py`、`ios_backup_cert_check.py`、`jb_detector.py`、`process_analyzer`、`sysdiagnose`。
+- 生成统一报告 `out/unified_report.json`、`out/unified_report.md`，并输出 MVT 产物到 `out/mvt_output/{json,files,logs}`。
+
+### 自定义 IOC 规则
+- 在仓库根目录放置 `iocs/`，支持三类文件：
+  - `iocs/domains.json`
+  - `iocs/paths.json`
+  - `iocs/behavior.json`
+- 示例 JSON 结构：
+  ```json
+  {
+    "domains": ["malicious.example.com"],
+    "paths": ["/private/var/mobile/Library/ConfigurationProfiles/ClientTruth.plist"],
+    "behaviors": ["unexpected_background_location_usage"]
+  }
+  ```
+- 运行时脚本会自动将 `iocs/` 传递给 `mvt-ios check-iocs --iocs iocs/`，并把 IOC 命中并入统一报告。
+
+### 输出格式
+- `out/unified_report.json` / `out/unified_report.md`：风险等级（High / Medium / Low）、越权分析、越狱/取证可能性、高敏路径命中、各子模块结果、MVT IOC 聚合，并附带命中路径分布与 IOC 条目计数的风险细节。
+- `mvt_output/json`：`mvt-ios check-backup`、`check-iocs` 产出的 JSON。
+- `mvt_output/files`：若执行解密/提取的文件输出目录。
+- `mvt_output/logs`：所有 MVT 命令的日志输出。
+
+### 示例与调试资源
+- `demo_data/`：存放示例数据与规则调试素材的专用目录，详细使用说明见 `demo_data/README.md`。
+
+### 备份输入类型与自动还原
+- `datalogic ios backup full-check` 会优先判断输入路径：
+  1. **已还原备份**：包含 `HomeDomain/` 等域目录时直接解析。
+  2. **iTunes 解密备份**：若检测到 `Manifest.db` / `Manifest.plist` 且未提供 `restored_tree`，会自动将目录还原到 `--out/restored_tree` 后再执行检测。
+  3. **提权备份 / 完整文件系统**：若输入目录包含 `private/var`、`var`、`System/Library` 等路径，自动按提权布局搜索描述文件、全局偏好、应用限制和证书。
+- 输入示例：
+  - 解密备份：`datalogic ios backup full-check --input /path/to/decrypted_backup --out ./output`（脚本会自动还原到 `./output/restored_tree`）。
+  - 提权备份：解压后保持原始层级（如 `private/var/mobile/Library/...`、`System/Library/...`），直接指定根目录：`datalogic ios backup full-check --input /path/to/privileged_dump --out ./output`。
+  - 已还原结构：直接传入 `restored_tree` 路径即可。
+
 ## 命令概览
 
 ```text
@@ -74,6 +145,25 @@ datalogic
   datalogic security jbd --src ./artifacts
   ```
   `--src` 目录需包含 `device_info.json`、`filesystem.json`、`system_baseline.json`、`oslog_full.txt` 以及 `output/logs/` 等文件，报告默认输出为该目录下的 `jailbreak_report.md`。
+
+## 基于提权备份目录的全量检测
+
+`detect_from_tree.py` 面向 iOS 17.x 提权后的完整备份目录，实现真实文件扫描 + 风控规则匹配 + 现有检测模块编排的统一入口。tree.txt 仅用于规则调试，不会参与安全判定。
+
+- 深度检测真实备份目录（推荐）
+```bash
+python detect_from_tree.py --src /path/to/restored_tree --out ./out --backup-password <若备份加密可选>
+```
+  - 递归扫描真实目录（等效 `tree -a`），匹配越狱/Hook、权限数据库、行为数据库、MDM/描述文件、企业签名/取证、系统分区异常、数据取证残留等路径模式。
+  - 自动调用 `ios_backup_full_check`、`ios_backup_cert_check`、`analyze_profiles`、`jb_detector`，并在检测到 sysdiagnose/OSLog 产物时联动 `generate_sysdiag_report`、`process_analyzer`，同时在存在备份或 sysdiagnose 结构时整合 `mvt-ios decrypt-backup` / `check-backup` / `check-iocs`（使用仓库根目录的 `iocs/` 规则）。
+  - 统一输出：`out/unified_report.json`、`out/unified_report.md`，聚合路径匹配风险、越狱特征、证书风险、描述文件/MDM 检测、敏感数据库命中、MVT IOC 命中与综合判定；子模块结果默认存放于 `./out/`（未指定时使用 `./unified_output/`）。
+  - 针对超大规模数据集，扫描与子模块调用过程会持续打印带时间戳的进度日志，确保长时间执行时可见度良好。
+
+- 规则调试模式（仅解析 tree.txt，查看模式命中，不生成安全报告）
+  ```bash
+  python detect_from_tree.py --tree ./tree.txt
+  ```
+  仅用于验证目录结构与路径模式，无任何风险输出。
 
 ## 模块与输出说明
 

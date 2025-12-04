@@ -1,0 +1,6 @@
+{
+  "behaviors": [
+    "suspicious_bundle_id",
+    "unexpected_background_location_usage"
+  ]
+}

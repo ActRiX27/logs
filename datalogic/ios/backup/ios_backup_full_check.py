@@ -19,7 +19,8 @@ import json
 import plistlib
 import argparse
 import base64
-from datetime import datetime
+from datalogic.utils import json_safe
+from datalogic.ios.backup.dataset_utils import DatasetContext, resolve_dataset
 
 # ------------------------------------------------------------
 # 日志
@@ -32,15 +33,6 @@ def log_warn(msg): print(f"[WARN] {msg}")
 # ------------------------------------------------------------
 # 工具
 # ------------------------------------------------------------
-def json_safe(obj):
-    if isinstance(obj, dict):
-        return {k: json_safe(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [json_safe(i) for i in obj]
-    elif isinstance(obj, bytes):
-        return base64.b64encode(obj).decode("utf-8")
-    return obj
-
 def md_value(v):
     if isinstance(v, bytes):
         return f"<bytes:{len(v)}>"
@@ -50,9 +42,12 @@ def md_value(v):
         return "{dict}"
     return str(v)
 
+REL_PREFIX = "restored_tree"
+
+
 def rel(root, abs_path):
     if abs_path.startswith(root):
-        return "restored_tree" + abs_path[len(root):]
+        return f"{REL_PREFIX}" + abs_path[len(root):]
     return abs_path
 
 def load_plist(path):
@@ -63,17 +58,54 @@ def load_plist(path):
         log_warn(f"Plist 解析失败: {path} ({e})")
         return None
 
+def candidate_alt_paths(root, rel_path):
+    alts = []
+    if rel_path.startswith("HomeDomain/"):
+        suffix = rel_path[len("HomeDomain/"):]
+        for prefix in ("var/mobile/", "private/var/mobile/", "var/root/", "private/var/root/"):
+            alts.append(os.path.join(root, prefix + suffix))
+    if rel_path.startswith("ManagedConfigurationDomain/"):
+        suffix = rel_path[len("ManagedConfigurationDomain/"):]
+        for prefix in (
+            "var/mobile/",
+            "private/var/mobile/",
+            "var/containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/",
+            "private/var/containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/",
+        ):
+            alts.append(os.path.join(root, prefix + suffix))
+    return alts
+
+
 def find_first(root, candidates, title):
     log_info(f"扫描 {title} ...")
     tried = []
+
+    # 1）直接按 restore 树相对路径查找
     for rel_path in candidates:
         abs_path = os.path.join(root, rel_path)
-        tried.append("restored_tree/" + rel_path)
+        tried.append(rel(root, abs_path))
         if os.path.exists(abs_path):
-            log_ok(f"找到文件：restored_tree/{rel_path}")
-            return abs_path, tried
+            log_ok(f"找到文件：{rel(root, abs_path)}")
+            return abs_path, list(dict.fromkeys(tried))
+
+    # 2）按提权备份常见位置兜底
+    for rel_path in candidates:
+        for alt in candidate_alt_paths(root, rel_path):
+            tried.append(rel(root, alt))
+            if os.path.exists(alt):
+                log_ok(f"在提权路径找到：{rel(root, alt)}")
+                return alt, list(dict.fromkeys(tried))
+
+    # 3）全局按文件名兜底
+    names = {os.path.basename(p) for p in candidates}
+    for name in names:
+        for found in find_files(root, name):
+            tried.append(rel(root, found))
+            log_ok(f"全局搜索命中：{rel(root, found)}")
+            return found, list(dict.fromkeys(tried))
+
     log_warn(f"{title} 未找到")
-    return None, tried
+    return None, list(dict.fromkeys(tried))
 
 def find_files(root, filename):
     results = []
@@ -534,6 +566,16 @@ def main(root, out):
     out = out or os.getcwd()
     os.makedirs(out, exist_ok=True)
 
+    # 自动识别数据类型：已还原 / iTunes 解密备份 / 提权备份
+    dataset: DatasetContext = resolve_dataset(root, out)
+    global REL_PREFIX
+    REL_PREFIX = dataset.display_prefix
+    root = dataset.root
+
+    log_info(f"数据来源类型：{dataset.kind}")
+    for note in dataset.notes:
+        log_info(note)
+
     log_info("===== 配置项检测 =====")
     config_result = {
         "profiles": detect_profiles(root),
@@ -559,6 +601,7 @@ def main(root, out):
     json_path = os.path.join(out, "full_analysis.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(json_safe({
+            "dataset": dataset.__dict__,
             "config_items": config_result,
             "certificates": cert_result,
             "apps": app_result,

@@ -21,23 +21,13 @@ import sys
 import json
 import plistlib
 import argparse
-import base64
-from datetime import datetime
+from datalogic.utils import json_safe
 
 
 # ==========================================================
-# JSON 安全转换（bytes → base64）
+# JSON 安全转换
+# （由 datalogic.utils.json_safe 统一处理）
 # ==========================================================
-
-def json_safe(obj):
-    if isinstance(obj, dict):
-        return {k: json_safe(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [json_safe(v) for v in obj]
-    elif isinstance(obj, bytes):
-        return base64.b64encode(obj).decode("utf-8")
-    return obj
-
 
 # ==========================================================
 # 用于 Markdown 的 bytes 简化显示

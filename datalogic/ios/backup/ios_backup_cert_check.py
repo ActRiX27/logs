@@ -20,21 +20,12 @@ import json
 import plistlib
 import base64
 import argparse
-from datetime import datetime
+from datalogic.utils import json_safe
 
 
 # ===========================================
-# JSON 安全（bytes → base64）
+# JSON 安全（由 datalogic.utils.json_safe 统一处理）
 # ===========================================
-
-def json_safe(obj):
-    if isinstance(obj, dict):
-        return {k: json_safe(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [json_safe(i) for i in obj]
-    elif isinstance(obj, bytes):
-        return base64.b64encode(obj).decode("utf-8")
-    return obj
 
 
 # ===========================================

@@ -1,0 +1,6 @@
+{
+  "domains": [
+    "malicious.example.com",
+    "tracker.example.org"
+  ]
+}
