@@ -1,6 +1,6 @@
 #!/bin/zsh
 # =========================================================
-# iOS Backup 全功能取证解析器 v4
+# iOS Backup 全功能取证解析器
 # - 输入：已解密的 iOS 备份目录（含 Manifest.db / Info.plist / hashed 子目录）
 # - 输出：backup_analysis/ 下的 mvt 结果 + backup_report_full.md/.docx
 # - 目标：
@@ -12,7 +12,7 @@
 #   * IOC 命中情况 + 可疑文件导出
 #
 # 用法示例：
-#   zsh ./parse_ios_backup_full_v4.sh \
+#   zsh ./parse_ios_backup.sh \
 #       --backup "/path/to/decrypted_backup" \
 #       --out "./backup_output_full"
 #

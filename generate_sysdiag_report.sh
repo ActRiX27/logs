@@ -1,8 +1,8 @@
 #!/bin/zsh
 # =========================================================
-# iOS sysdiagnose 自动报告 v12（v8.12 基线 + v11.1 增强）
+# iOS sysdiagnose 自动报告脚本（基于 mvt-ios check-fs）
 # 仅基于 mvt-ios check-fs 能见范围；不包含备份专属数据（浏览史/描述文件/证书等）。
-# 用法：zsh ./generate_sysdiag_report_v12.sh --src ./unpacked --out ./output_auto [--fast]
+# 用法：zsh ./generate_sysdiag_report.sh --src ./unpacked --out ./output_auto [--fast]
 # 依赖：mvt-ios, jq, plutil(macOS自带), 可选 pandoc
 # =========================================================
 
@@ -270,7 +270,7 @@ fi
 # --------- 生成报告 ----------
 echo "📝 正在生成报告..."
 {
-  echo "# 📱 iOS sysdiagnose 安全分析报告（v12，check-fs 基线 + 可选 OSLog）"
+  echo "# 📱 iOS sysdiagnose 安全分析报告（check-fs 基线 + 可选 OSLog）"
   echo
   echo "**生成时间：** $(date '+%Y-%m-%d %H:%M:%S')"
   echo "**检测设备：** ${MARKETING_NAME}"

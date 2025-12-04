@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-iOS sysdiagnose 综合安全分析脚本 v13_t2（增强版，含路径脱敏）
+iOS sysdiagnose 综合安全分析脚本（含路径脱敏，融合原 v13_t2 功能）
 
 能力：
 - 文件系统扫描（越狱路径 / 调试路径 / IOC 文本匹配 / 扩展名统计）
@@ -100,10 +100,10 @@ def safe_read_text(path, max_bytes=64 * 1024):
 
 
 # ---------------------------
-# 主类：v13_t2
+# 主类：综合分析器（由 v13_t2 版本整合）
 # ---------------------------
 
-class SysDiagReportT2:
+class SysDiagReport:
     def __init__(self, src_dir, out_dir):
         # 真实 sysdiagnose 根目录（仅内部使用，不写入报告）
         self.src_dir_real = os.path.abspath(src_dir)
@@ -116,7 +116,7 @@ class SysDiagReportT2:
         os.makedirs(self.raw_dir, exist_ok=True)
 
         self.report = {
-            "version": "v13_t2",
+            "version": "merged_sysdiag",
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "src_dir": "<SRC_ROOT>",  # 报告中不暴露真实路径
             "device_info": {},
@@ -593,8 +593,8 @@ class SysDiagReportT2:
     def save_report(self):
         self.finalize_summary()
 
-        json_path = os.path.join(self.out_dir, "report_v13_t2.json")
-        md_path = os.path.join(self.out_dir, "report_v13_t2.md")
+        json_path = os.path.join(self.out_dir, "report_sysdiagnose.json")
+        md_path = os.path.join(self.out_dir, "report_sysdiagnose.md")
 
         with open(json_path, "w") as f:
             json.dump(self.report, f, ensure_ascii=False, indent=2)
@@ -642,7 +642,7 @@ class SysDiagReportT2:
         }
 
         with open(md_path, "w") as f:
-            f.write("# iOS Sysdiagnose 综合安全分析报告 v13_t2（含路径脱敏）\n\n")
+            f.write("# iOS Sysdiagnose 综合安全分析报告（含路径脱敏）\n\n")
             f.write(f"- 生成时间：{self.report['generated_at']}\n")
             f.write(f"- 源目录：<SRC_ROOT>\n")
             f.write(f"- 综合严重等级：{self.report['summary']['overall_severity']}\n")
@@ -741,12 +741,12 @@ class SysDiagReportT2:
 # ---------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="iOS sysdiagnose 综合分析（v13_t2，含路径脱敏）")
+    parser = argparse.ArgumentParser(description="iOS sysdiagnose 综合分析（含路径脱敏）")
     parser.add_argument("--src", required=True, help="sysdiagnose 解压后的根目录")
     parser.add_argument("--out", required=True, help="报告输出目录")
     args = parser.parse_args()
 
-    analyzer = SysDiagReportT2(args.src, args.out)
+    analyzer = SysDiagReport(args.src, args.out)
     json_path, md_path = analyzer.run()
 
     print("分析完成：")

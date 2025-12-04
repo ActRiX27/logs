@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# process_analyzer_v3.py
+# 进程日志分析脚本
 #
 # 功能：
 #   1. 解析 sysdiagnose / OSLog / part_xx 日志，识别所有进程名
@@ -13,7 +13,7 @@
 #   7. 自动判断：是否包含进程路径相关信息
 #
 # 使用方法:
-#   python3 process_analyzer_v2.py --src ./sysdiagnose --fs filesystem.json --out ./output
+#   python3 process_analyzer.py --src ./sysdiagnose --fs filesystem.json --out ./output
 #
 
 import os
@@ -239,7 +239,7 @@ def generate_markdown_report(
         # ============================================================
         #                    报告标题
         # ============================================================
-        md.write("# iOS 进程检测报告（process_analyzer_v3.1）\n\n")
+        md.write("# iOS 进程检测报告（process_analyzer）\n\n")
         md.write("本报告根据 sysdiagnose / OSLog 自动识别进程活动，并对签名、沙盒、权限、task_for_pid 等行为进行风险评估。\n\n")
         md.write("---\n\n")
 
