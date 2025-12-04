@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "datalogic"
+version = "0.1.0"
+description = "Unified iOS backup, sysdiagnose and security analysis toolkit."
+authors = [{ name = "ActRiX" }]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "click>=8.0",
+]
+
+[project.scripts]
+datalogic = "datalogic.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+"datalogic" = [
+    "ios/backup/parse_ios_backup.sh",
+    "ios/sysdiag/generate_sysdiag_report.sh",
+]

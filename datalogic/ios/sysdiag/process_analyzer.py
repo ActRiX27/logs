@@ -369,7 +369,18 @@ def generate_markdown_report(
                 md.write(f"> {ln}\n")
             md.write("\n---\n")
 
-        print(f"[+] process_report.md 已生成：{md_path}")
+    print(f"[+] process_report.md 已生成：{md_path}")
+
+
+# -----------------------------------------------------
+# wrappers
+# -----------------------------------------------------
+
+
+def run(src_dir, filesystem_json, out_dir):
+    logs = collect_logs(src_dir)
+    filesystem = load_filesystem(filesystem_json) if filesystem_json else None
+    analyze_processes(logs, filesystem, out_dir)
 
 
 # -----------------------------------------------------
@@ -382,10 +393,6 @@ if __name__ == "__main__":
     parser.add_argument("--out", required=True, help="输出目录")
     args = parser.parse_args()
 
-    logs = collect_logs(args.src)
-    filesystem = load_filesystem(args.fs) if args.fs else None
-
-
-    analyze_processes(logs, filesystem, args.out)
+    run(args.src, args.fs, args.out)
 
     print("[*] 进程检测完成。")

@@ -40,10 +40,16 @@ def restore_backup_structure(backup_dir, output_dir):
     conn.close()
     print(f"🎉 完成！所有文件已还原至：{output_dir}")
 
+
+def run(input_path, output_path):
+    """Command wrapper for CLI usage."""
+    restore_backup_structure(input_path, output_path)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Restore iOS backup structure using Manifest.db")
     parser.add_argument("--input", required=True, help="解密后的备份目录（包含 Manifest.db）")
     parser.add_argument("--output", required=True, help="输出还原目录")
 
     args = parser.parse_args()
-    restore_backup_structure(args.input, args.output)
+    run(args.input, args.output)

@@ -353,32 +353,30 @@ def generate_report(out_path, device_info, fs_hits, tweaks, log_hits, new_sys, e
 
     print(f"[+] 报告已生成：{out_path}")
 
+
+# ============================================================
+# wrappers
+# ============================================================
+
+
+def run(device_info_path="device_info.json", filesystem_path="filesystem.json", baseline_path="system_baseline.json", log_path="oslog_full.txt", log_dir="output/logs", report_path="jailbreak_report.md"):
+    device = load_device_info(device_info_path)
+    fs_paths = load_filesystem(filesystem_path)
+    baseline = load_system_baseline(baseline_path)
+
+    fs_hits = scan_fs(fs_paths)
+    tweaks = scan_tweaks(fs_paths)
+    log_hits = scan_oslog(path=log_path, log_dir=log_dir)
+    new_sys, exec_hits = scan_system_new_files(fs_paths, baseline)
+
+    generate_report(report_path, device, fs_hits, tweaks, log_hits, new_sys, exec_hits)
+    return report_path
+
 # ============================================================
 # main
 # ============================================================
 if __name__ == "__main__":
     print("[+] 加载设备信息 device_info.json ...")
-    device = load_device_info()
-
-    print("[+] 加载文件系统快照 filesystem.json ...")
-    fs_paths = load_filesystem()
-
-    print("[+] 加载系统分区基线 system_baseline.json ...")
-    baseline = load_system_baseline()
-
-    print("[+] 扫描文件系统越狱路径 ...")
-    fs_hits = scan_fs(fs_paths)
-
-    print("[+] 扫描插件 / Tweak 文件 ...")
-    tweaks = scan_tweaks(fs_paths)
-
-    print("[+] 扫描行为日志 oslog_full.txt ...")
-    log_hits = scan_oslog(path="oslog_full.txt", log_dir="output/logs")
-
-    print("[+] 扫描系统分区新增文件 ...")
-    new_sys, exec_hits = scan_system_new_files(fs_paths, baseline)
-
-    print("[+] 生成越狱检测报告 jailbreak_report.md ...")
-    generate_report("jailbreak_report.md", device, fs_hits, tweaks, log_hits, new_sys, exec_hits)
+    run()
 
     print("[+] 完成。jailbreak_report.md 已生成。")

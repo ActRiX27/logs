@@ -740,14 +740,18 @@ class SysDiagReport:
 # 命令行入口
 # ---------------------------
 
+def run(src_dir, out_dir):
+    analyzer = SysDiagReport(src_dir, out_dir)
+    return analyzer.run()
+
+
 def main():
     parser = argparse.ArgumentParser(description="iOS sysdiagnose 综合分析（含路径脱敏）")
     parser.add_argument("--src", required=True, help="sysdiagnose 解压后的根目录")
     parser.add_argument("--out", required=True, help="报告输出目录")
     args = parser.parse_args()
 
-    analyzer = SysDiagReport(args.src, args.out)
-    json_path, md_path = analyzer.run()
+    json_path, md_path = run(args.src, args.out)
 
     print("分析完成：")
     print("JSON 报告：", json_path)

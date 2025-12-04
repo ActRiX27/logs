@@ -572,10 +572,15 @@ def main(root, out):
     log_ok("✔ 检测完成")
 
 
+def run(input_path, out_path=None):
+    """Command wrapper for CLI usage."""
+    return main(input_path, out_path)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="iOS Backup Full Security Checker v3.4")
     parser.add_argument("--input", required=True, help="restored_tree 根目录")
     parser.add_argument("--out", required=False, help="输出目录")
     args = parser.parse_args()
 
-    main(args.input, args.out)
+    run(args.input, args.out)
