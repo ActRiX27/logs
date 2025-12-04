@@ -10,6 +10,51 @@ pip install .
 
 安装后可直接使用 `datalogic` 命令。
 
+> 说明：仓库不直接提交 wheel / tar.gz 等二进制发布产物，若需本地生成发行包，请运行 `python scripts/build_artifacts.py`，脚本会使用 `python -m build` 在
+> `dist/` 目录下生成可供发布的 wheel 与源码压缩包。
+
+## 安装与使用指南
+
+### 环境准备
+- Python 3.8+
+- `pip install mvt`
+- `pip install -r requirements.txt`
+- 可选：`brew install libimobiledevice`（macOS 可使用 libimobiledevice 读取设备信息）
+
+### 安装 MVT（Mobile Verification Toolkit）
+- macOS：`brew install mvt`
+- 或跨平台：`pip3 install mvt`
+
+### 统一检测脚本示例
+```bash
+python3 detect_from_tree.py --src /path/to/backup --out ./out
+```
+
+- 自动识别目录类型（iOS 备份 / 提权备份 / sysdiagnose），匹配越狱/Hook、权限数据库、MDM/描述文件、企业签名与取证痕迹。
+- 自动串联 MVT（check-backup / decrypt-backup / check-iocs）与仓库内置脚本：`ios_backup_full_check.py`、`analyze_profiles.py`、`ios_backup_cert_check.py`、`jb_detector.py`、`process_analyzer`、`sysdiagnose`。
+- 生成统一报告 `out/unified_report.json`、`out/unified_report.md`，并输出 MVT 产物到 `out/mvt_output/{json,files,logs}`。
+
+### 自定义 IOC 规则
+- 在仓库根目录放置 `iocs/`，支持三类文件：
+  - `iocs/domains.json`
+  - `iocs/paths.json`
+  - `iocs/behavior.json`
+- 示例 JSON 结构：
+  ```json
+  {
+    "domains": ["malicious.example.com"],
+    "paths": ["/private/var/mobile/Library/ConfigurationProfiles/ClientTruth.plist"],
+    "behaviors": ["unexpected_background_location_usage"]
+  }
+  ```
+- 运行时脚本会自动将 `iocs/` 传递给 `mvt-ios check-iocs --iocs iocs/`，并把 IOC 命中并入统一报告。
+
+### 输出格式
+- `out/unified_report.json` / `out/unified_report.md`：风险等级（High / Medium / Low）、越权分析、越狱/取证可能性、高敏路径命中、各子模块结果、MVT IOC 聚合，并附带命中路径分布与 IOC 条目计数的风险细节。
+- `mvt_output/json`：`mvt-ios check-backup`、`check-iocs` 产出的 JSON。
+- `mvt_output/files`：若执行解密/提取的文件输出目录。
+- `mvt_output/logs`：所有 MVT 命令的日志输出。
+
 ## 命令概览
 
 ```text
@@ -74,6 +119,24 @@ datalogic
   datalogic security jbd --src ./artifacts
   ```
   `--src` 目录需包含 `device_info.json`、`filesystem.json`、`system_baseline.json`、`oslog_full.txt` 以及 `output/logs/` 等文件，报告默认输出为该目录下的 `jailbreak_report.md`。
+
+## 基于提权备份目录的全量检测
+
+`detect_from_tree.py` 面向 iOS 17.x 提权后的完整备份目录，实现真实文件扫描 + 风控规则匹配 + 现有检测模块编排的统一入口。tree.txt 仅用于规则调试，不会参与安全判定。
+
+- 深度检测真实备份目录（推荐）
+```bash
+python detect_from_tree.py --src /path/to/restored_tree --out ./out --backup-password <若备份加密可选>
+```
+  - 递归扫描真实目录（等效 `tree -a`），匹配越狱/Hook、权限数据库、行为数据库、MDM/描述文件、企业签名/取证、系统分区异常、数据取证残留等路径模式。
+  - 自动调用 `ios_backup_full_check`、`ios_backup_cert_check`、`analyze_profiles`、`jb_detector`，并在检测到 sysdiagnose/OSLog 产物时联动 `generate_sysdiag_report`、`process_analyzer`，同时在存在备份或 sysdiagnose 结构时整合 `mvt-ios decrypt-backup` / `check-backup` / `check-iocs`（使用仓库根目录的 `iocs/` 规则）。
+  - 统一输出：`out/unified_report.json`、`out/unified_report.md`，聚合路径匹配风险、越狱特征、证书风险、描述文件/MDM 检测、敏感数据库命中、MVT IOC 命中与综合判定；子模块结果默认存放于 `./out/`（未指定时使用 `./unified_output/`）。
+
+- 规则调试模式（仅解析 tree.txt，查看模式命中，不生成安全报告）
+  ```bash
+  python detect_from_tree.py --tree ./tree.txt
+  ```
+  仅用于验证目录结构与路径模式，无任何风险输出。
 
 ## 模块与输出说明
 
