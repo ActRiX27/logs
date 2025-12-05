@@ -96,12 +96,19 @@ def find_first(root, candidates, title):
                 log_ok(f"在提权路径找到：{rel(root, alt)}")
                 return alt, list(dict.fromkeys(tried))
 
-    # 3）全局按文件名兜底
+    # 3）先用快速扫描方式按文件名兜底（遇到首个命中即停止，避免构建全量索引过慢）
     names = {os.path.basename(p) for p in candidates}
+    quick_found = find_first_by_name(root, names)
+    if quick_found:
+        tried.append(rel(root, quick_found))
+        log_ok(f"全局快速搜索命中：{rel(root, quick_found)}")
+        return quick_found, list(dict.fromkeys(tried))
+
+    # 4）如仍未找到，再回退到全量索引（只构建一次），便于后续复用
     for name in names:
         for found in find_files(root, name):
             tried.append(rel(root, found))
-            log_ok(f"全局搜索命中：{rel(root, found)}")
+            log_ok(f"全局索引搜索命中：{rel(root, found)}")
             return found, list(dict.fromkeys(tried))
 
     log_warn(f"{title} 未找到")
@@ -109,6 +116,7 @@ def find_first(root, candidates, title):
 
 _NAME_INDEX_ROOT = None
 _NAME_INDEX = {}
+_PRUNE_DIR_HINTS = ["cache", "caches", "tmp", "temp", "logs", "logarchive"]
 
 
 def _ensure_name_index(root):
@@ -123,6 +131,32 @@ def _ensure_name_index(root):
     for r, _, files in os.walk(root):
         for name in files:
             _NAME_INDEX.setdefault(name, []).append(os.path.join(r, name))
+
+
+def find_first_by_name(root, filenames):
+    """Quickly locate the first match of any given filename without building a full index.
+
+    - 优先用于常见的小文件名（如 .GlobalPreferences*），遇到首个命中就返回。
+    - 自动剪枝常见日志/缓存目录，减少无谓遍历。
+    """
+
+    targets = set(filenames)
+    if not targets:
+        return None
+
+    prune = tuple(_PRUNE_DIR_HINTS)
+
+    for r, dirs, files in os.walk(root):
+        # 剪枝：移除常见缓存/日志目录，加快深度遍历
+        dirs[:] = [d for d in dirs if not any(d.lower().startswith(p) for p in prune)]
+
+        hits = targets.intersection(files)
+        if hits:
+            # 返回最先命中的文件（按名字排序保证稳定）
+            chosen = sorted(hits)[0]
+            return os.path.join(r, chosen)
+
+    return None
 
 
 def find_files(root, filename):
