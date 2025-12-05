@@ -71,6 +71,9 @@ python3 detect_from_tree.py --src /path/to/backup --out ./out
 ### 示例与调试资源
 - `demo_data/`：存放示例数据与规则调试素材的专用目录，详细使用说明见 `demo_data/README.md`。
 
+### 草案与设计稿
+- 草案内容不再写入根目录 README，请查看 `drafts/README.md` 了解草案存放与命名约定。
+
 ### 备份输入类型与自动还原
 - `datalogic ios backup full-check` 会优先判断输入路径：
   1. **已还原备份**：包含 `HomeDomain/` 等域目录时直接解析。
