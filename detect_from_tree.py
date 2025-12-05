@@ -74,12 +74,24 @@ CATEGORY_SEVERITY = {
 }
 
 
+<<<<<<< HEAD
+=======
+def log_info(message: str) -> None:
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] {message}")
+
+
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
 def scan_directory(path: Path) -> List[str]:
     """递归扫描目录并返回完整路径列表（绝对路径）。"""
 
     if not path.exists():
         raise FileNotFoundError(f"路径不存在: {path}")
 
+<<<<<<< HEAD
+=======
+    log_info(f"开始扫描目录：{path}")
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
     collected: List[str] = []
     for current, dirs, files in os.walk(path):
         dirs.sort()
@@ -87,6 +99,13 @@ def scan_directory(path: Path) -> List[str]:
         for name in dirs + files:
             full_path = Path(current) / name
             collected.append(str(full_path))
+<<<<<<< HEAD
+=======
+            if len(collected) % 5000 == 0:
+                log_info(f"已枚举路径 {len(collected)} 条……")
+
+    log_info(f"目录扫描完成，共 {len(collected)} 条路径")
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
     return collected
 
 
@@ -308,6 +327,10 @@ def run_sysdiag_modules_if_ready(src: Path, paths: List[str], out_root: Path) ->
 
 def run_subprocess_logged(command: Sequence[str], log_path: Path) -> Dict[str, object]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
+<<<<<<< HEAD
+=======
+    log_info(f"运行外部命令：{' '.join(command)}，日志输出 -> {log_path}")
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
     try:
         proc = subprocess.run(
             list(command),
@@ -317,6 +340,10 @@ def run_subprocess_logged(command: Sequence[str], log_path: Path) -> Dict[str, o
         )
         log_path.write_text((proc.stdout or "") + "\n" + (proc.stderr or ""), encoding="utf-8")
         status = "ok" if proc.returncode == 0 else "error"
+<<<<<<< HEAD
+=======
+        log_info(f"命令完成（status={status}, returncode={proc.returncode}）")
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
         return {
             "status": status,
             "returncode": proc.returncode,
@@ -558,6 +585,10 @@ def build_report(
 def run_tree_only(tree_path: Path) -> None:
     if not tree_path.exists():
         raise FileNotFoundError(f"tree.txt 不存在：{tree_path}")
+<<<<<<< HEAD
+=======
+    log_info(f"以 tree.txt 规则调试模式运行：{tree_path}")
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
     paths = load_tree_file(tree_path)
     detections = match_patterns(paths)
     print("[tree 调试模式] 以下命中仅用于规则调试，不代表实际风险：")
@@ -582,21 +613,44 @@ def run_detection(src: Path, tree_path: Optional[Path], out_root: Path, backup_p
         iocs_dir = Path.cwd() / "iocs"
     iocs_dir.mkdir(parents=True, exist_ok=True)
 
+<<<<<<< HEAD
     fs_paths = scan_directory(src)
+=======
+    log_info(f"开始运行统一检测，数据源：{src}，输出目录：{out_root}")
+    fs_paths = scan_directory(src)
+    log_info("目录扫描完成，开始识别数据集类型与风险模式……")
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
     dataset = detect_dataset_types(fs_paths)
     detections = match_patterns(fs_paths)
 
     module_runs: List[Dict[str, object]] = []
+<<<<<<< HEAD
     module_runs.extend(run_backup_modules_if_detected(dataset, src, out_root))
     module_runs.append(run_jb_detector_if_ready(src, out_root))
     module_runs.extend(run_sysdiag_modules_if_ready(src, fs_paths, out_root))
+=======
+    log_info("调用备份相关模块……")
+    module_runs.extend(run_backup_modules_if_detected(dataset, src, out_root))
+    log_info("调用越狱检测模块……")
+    module_runs.append(run_jb_detector_if_ready(src, out_root))
+    log_info("调用 sysdiagnose/OSLog 相关模块……")
+    module_runs.extend(run_sysdiag_modules_if_ready(src, fs_paths, out_root))
+    log_info("调用 MVT 模块……")
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
     mvt_outputs, mvt_findings = run_mvt_if_needed(dataset, src, out_root, iocs_dir, backup_password)
     module_runs.extend(mvt_outputs)
 
     tree_inference: Optional[List[Dict[str, object]]] = None
     if tree_path:
+<<<<<<< HEAD
         tree_inference = match_patterns(load_tree_file(tree_path))
 
+=======
+        log_info("加载 tree.txt 进行规则调试（不影响风险判定）……")
+        tree_inference = match_patterns(load_tree_file(tree_path))
+
+    log_info("汇总报告并写入输出目录……")
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
     report = build_report(src, detections, module_runs, dataset, mvt_findings, tree_inference)
 
     report_json_path = out_root / "unified_report.json"

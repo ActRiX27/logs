@@ -4,7 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datalogic"
+<<<<<<< HEAD
 version = "0.2.0"
+=======
+version = "0.2.5"
+>>>>>>> codex/add-unified-detection-script-detect_from_tree.py-51ys18
 description = "Unified iOS backup, sysdiagnose and security analysis toolkit."
 authors = [{ name = "ActRiX" }]
 readme = "README.md"

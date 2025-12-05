@@ -1,0 +1,29 @@
+/
+├── System
+│   ├── Library
+│   │   └── Caches
+│   └── Library
+│       └── PrivateFrameworks
+├── private
+│   └── var
+│       ├── db
+│       │   └── stash
+│       ├── mobile
+│       │   ├── Library
+│       │   │   ├── ConfigurationProfiles
+│       │   │   ├── Logs
+│       │   │   └── Preferences
+│       │   └── Containers
+│       │       └── Data
+│       │           └── Application
+│       │               └── <BundleID>
+│       │                   └── Library
+│       │                       └── Caches
+│       └── tmp
+└── usr
+    ├── lib
+    │   └── TweakInject
+    └── libexec
+        ├── substrate
+        ├── substitute
+        └── ellekit

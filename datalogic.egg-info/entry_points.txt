@@ -1,0 +1,2 @@
+[console_scripts]
+datalogic = datalogic.cli:main

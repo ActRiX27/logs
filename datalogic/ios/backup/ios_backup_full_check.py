@@ -19,7 +19,8 @@ import json
 import plistlib
 import argparse
 import base64
-from datetime import datetime
+from datalogic.utils import json_safe
+from datalogic.ios.backup.dataset_utils import DatasetContext, resolve_dataset
 
 # ------------------------------------------------------------
 # 日志
@@ -32,15 +33,6 @@ def log_warn(msg): print(f"[WARN] {msg}")
 # ------------------------------------------------------------
 # 工具
 # ------------------------------------------------------------
-def json_safe(obj):
-    if isinstance(obj, dict):
-        return {k: json_safe(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [json_safe(i) for i in obj]
-    elif isinstance(obj, bytes):
-        return base64.b64encode(obj).decode("utf-8")
-    return obj
-
 def md_value(v):
     if isinstance(v, bytes):
         return f"<bytes:{len(v)}>"
@@ -50,9 +42,12 @@ def md_value(v):
         return "{dict}"
     return str(v)
 
+REL_PREFIX = "restored_tree"
+
+
 def rel(root, abs_path):
     if abs_path.startswith(root):
-        return "restored_tree" + abs_path[len(root):]
+        return f"{REL_PREFIX}" + abs_path[len(root):]
     return abs_path
 
 def load_plist(path):
@@ -63,24 +58,110 @@ def load_plist(path):
         log_warn(f"Plist 解析失败: {path} ({e})")
         return None
 
+def candidate_alt_paths(root, rel_path):
+    alts = []
+    if rel_path.startswith("HomeDomain/"):
+        suffix = rel_path[len("HomeDomain/"):]
+        for prefix in ("var/mobile/", "private/var/mobile/", "var/root/", "private/var/root/"):
+            alts.append(os.path.join(root, prefix + suffix))
+    if rel_path.startswith("ManagedConfigurationDomain/"):
+        suffix = rel_path[len("ManagedConfigurationDomain/"):]
+        for prefix in (
+            "var/mobile/",
+            "private/var/mobile/",
+            "var/containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/",
+            "private/var/containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/",
+        ):
+            alts.append(os.path.join(root, prefix + suffix))
+    return alts
+
+
 def find_first(root, candidates, title):
     log_info(f"扫描 {title} ...")
     tried = []
+
+    # 1）直接按 restore 树相对路径查找
     for rel_path in candidates:
         abs_path = os.path.join(root, rel_path)
-        tried.append("restored_tree/" + rel_path)
+        tried.append(rel(root, abs_path))
         if os.path.exists(abs_path):
-            log_ok(f"找到文件：restored_tree/{rel_path}")
-            return abs_path, tried
+            log_ok(f"找到文件：{rel(root, abs_path)}")
+            return abs_path, list(dict.fromkeys(tried))
+
+    # 2）按提权备份常见位置兜底
+    for rel_path in candidates:
+        for alt in candidate_alt_paths(root, rel_path):
+            tried.append(rel(root, alt))
+            if os.path.exists(alt):
+                log_ok(f"在提权路径找到：{rel(root, alt)}")
+                return alt, list(dict.fromkeys(tried))
+
+    # 3）先用快速扫描方式按文件名兜底（遇到首个命中即停止，避免构建全量索引过慢）
+    names = {os.path.basename(p) for p in candidates}
+    quick_found = find_first_by_name(root, names)
+    if quick_found:
+        tried.append(rel(root, quick_found))
+        log_ok(f"全局快速搜索命中：{rel(root, quick_found)}")
+        return quick_found, list(dict.fromkeys(tried))
+
+    # 4）如仍未找到，再回退到全量索引（只构建一次），便于后续复用
+    for name in names:
+        for found in find_files(root, name):
+            tried.append(rel(root, found))
+            log_ok(f"全局索引搜索命中：{rel(root, found)}")
+            return found, list(dict.fromkeys(tried))
+
     log_warn(f"{title} 未找到")
-    return None, tried
+    return None, list(dict.fromkeys(tried))
+
+_NAME_INDEX_ROOT = None
+_NAME_INDEX = {}
+_PRUNE_DIR_HINTS = ["cache", "caches", "tmp", "temp", "logs", "logarchive"]
+
+
+def _ensure_name_index(root):
+    """Build a filename -> paths index once to avoid重复全量遍历."""
+    global _NAME_INDEX_ROOT, _NAME_INDEX
+    if _NAME_INDEX_ROOT == root:
+        return
+
+    log_info("[加速] 正在构建文件名索引，以便快速匹配常见配置文件 ...")
+    _NAME_INDEX_ROOT = root
+    _NAME_INDEX = {}
+    for r, _, files in os.walk(root):
+        for name in files:
+            _NAME_INDEX.setdefault(name, []).append(os.path.join(r, name))
+
+
+def find_first_by_name(root, filenames):
+    """Quickly locate the first match of any given filename without building a full index.
+
+    - 优先用于常见的小文件名（如 .GlobalPreferences*），遇到首个命中就返回。
+    - 自动剪枝常见日志/缓存目录，减少无谓遍历。
+    """
+
+    targets = set(filenames)
+    if not targets:
+        return None
+
+    prune = tuple(_PRUNE_DIR_HINTS)
+
+    for r, dirs, files in os.walk(root):
+        # 剪枝：移除常见缓存/日志目录，加快深度遍历
+        dirs[:] = [d for d in dirs if not any(d.lower().startswith(p) for p in prune)]
+
+        hits = targets.intersection(files)
+        if hits:
+            # 返回最先命中的文件（按名字排序保证稳定）
+            chosen = sorted(hits)[0]
+            return os.path.join(r, chosen)
+
+    return None
+
 
 def find_files(root, filename):
-    results = []
-    for r, d, f in os.walk(root):
-        if filename in f:
-            results.append(os.path.join(r, filename))
-    return results
+    _ensure_name_index(root)
+    return list(_NAME_INDEX.get(filename, []))
 
 
 # ============================================================
@@ -100,6 +181,15 @@ GLOBAL_PREF_CANDIDATE_NAMES = [
     ".GlobalPreferences.plist",
     ".GlobalPreferences_m.plist",
     ".GlobalPreferences.plist.old",
+]
+
+# 提权/还原目录下常见的 Preferences 搜索路径，避免全盘扫描过慢
+GLOBAL_PREF_SEARCH_DIRS = [
+    "HomeDomain/Library/Preferences",
+    "var/mobile/Library/Preferences",
+    "private/var/mobile/Library/Preferences",
+    "var/root/Library/Preferences",
+    "private/var/root/Library/Preferences",
 ]
 
 
@@ -193,13 +283,27 @@ def detect_global_prefs(root):
         if os.path.exists(abs_path):
             found_candidates.append(abs_path)
 
-    # 2）再用通用搜索兜底
-    for name in GLOBAL_PREF_CANDIDATE_NAMES:
-        matches = find_files(root, name)
-        for m in matches:
-            if m not in found_candidates:
-                found_candidates.append(m)
-                scan_paths.append(rel(root, m))
+    # 2）在常见 Preferences 目录中快速搜索，避免全盘扫描
+    for base in GLOBAL_PREF_SEARCH_DIRS:
+        base_abs = os.path.join(root, base)
+        if not os.path.isdir(base_abs):
+            continue
+        for r, _, files in os.walk(base_abs):
+            for name in GLOBAL_PREF_CANDIDATE_NAMES:
+                if name in files:
+                    candidate = os.path.join(r, name)
+                    if candidate not in found_candidates:
+                        found_candidates.append(candidate)
+                        scan_paths.append(rel(root, candidate))
+
+    # 3）最后兜底：使用全局索引搜索一次
+    if not found_candidates:
+        for name in GLOBAL_PREF_CANDIDATE_NAMES:
+            matches = find_files(root, name)
+            for m in matches:
+                if m not in found_candidates:
+                    found_candidates.append(m)
+                    scan_paths.append(rel(root, m))
 
     info = {
         "scan_paths": list(dict.fromkeys(scan_paths)),  # 去重
@@ -534,6 +638,16 @@ def main(root, out):
     out = out or os.getcwd()
     os.makedirs(out, exist_ok=True)
 
+    # 自动识别数据类型：已还原 / iTunes 解密备份 / 提权备份
+    dataset: DatasetContext = resolve_dataset(root, out)
+    global REL_PREFIX
+    REL_PREFIX = dataset.display_prefix
+    root = dataset.root
+
+    log_info(f"数据来源类型：{dataset.kind}")
+    for note in dataset.notes:
+        log_info(note)
+
     log_info("===== 配置项检测 =====")
     config_result = {
         "profiles": detect_profiles(root),
@@ -559,6 +673,7 @@ def main(root, out):
     json_path = os.path.join(out, "full_analysis.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(json_safe({
+            "dataset": dataset.__dict__,
             "config_items": config_result,
             "certificates": cert_result,
             "apps": app_result,
