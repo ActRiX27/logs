@@ -107,12 +107,27 @@ def find_first(root, candidates, title):
     log_warn(f"{title} 未找到")
     return None, list(dict.fromkeys(tried))
 
+_NAME_INDEX_ROOT = None
+_NAME_INDEX = {}
+
+
+def _ensure_name_index(root):
+    """Build a filename -> paths index once to avoid重复全量遍历."""
+    global _NAME_INDEX_ROOT, _NAME_INDEX
+    if _NAME_INDEX_ROOT == root:
+        return
+
+    log_info("[加速] 正在构建文件名索引，以便快速匹配常见配置文件 ...")
+    _NAME_INDEX_ROOT = root
+    _NAME_INDEX = {}
+    for r, _, files in os.walk(root):
+        for name in files:
+            _NAME_INDEX.setdefault(name, []).append(os.path.join(r, name))
+
+
 def find_files(root, filename):
-    results = []
-    for r, d, f in os.walk(root):
-        if filename in f:
-            results.append(os.path.join(r, filename))
-    return results
+    _ensure_name_index(root)
+    return list(_NAME_INDEX.get(filename, []))
 
 
 # ============================================================
@@ -132,6 +147,15 @@ GLOBAL_PREF_CANDIDATE_NAMES = [
     ".GlobalPreferences.plist",
     ".GlobalPreferences_m.plist",
     ".GlobalPreferences.plist.old",
+]
+
+# 提权/还原目录下常见的 Preferences 搜索路径，避免全盘扫描过慢
+GLOBAL_PREF_SEARCH_DIRS = [
+    "HomeDomain/Library/Preferences",
+    "var/mobile/Library/Preferences",
+    "private/var/mobile/Library/Preferences",
+    "var/root/Library/Preferences",
+    "private/var/root/Library/Preferences",
 ]
 
 
@@ -225,13 +249,27 @@ def detect_global_prefs(root):
         if os.path.exists(abs_path):
             found_candidates.append(abs_path)
 
-    # 2）再用通用搜索兜底
-    for name in GLOBAL_PREF_CANDIDATE_NAMES:
-        matches = find_files(root, name)
-        for m in matches:
-            if m not in found_candidates:
-                found_candidates.append(m)
-                scan_paths.append(rel(root, m))
+    # 2）在常见 Preferences 目录中快速搜索，避免全盘扫描
+    for base in GLOBAL_PREF_SEARCH_DIRS:
+        base_abs = os.path.join(root, base)
+        if not os.path.isdir(base_abs):
+            continue
+        for r, _, files in os.walk(base_abs):
+            for name in GLOBAL_PREF_CANDIDATE_NAMES:
+                if name in files:
+                    candidate = os.path.join(r, name)
+                    if candidate not in found_candidates:
+                        found_candidates.append(candidate)
+                        scan_paths.append(rel(root, candidate))
+
+    # 3）最后兜底：使用全局索引搜索一次
+    if not found_candidates:
+        for name in GLOBAL_PREF_CANDIDATE_NAMES:
+            matches = find_files(root, name)
+            for m in matches:
+                if m not in found_candidates:
+                    found_candidates.append(m)
+                    scan_paths.append(rel(root, m))
 
     info = {
         "scan_paths": list(dict.fromkeys(scan_paths)),  # 去重
